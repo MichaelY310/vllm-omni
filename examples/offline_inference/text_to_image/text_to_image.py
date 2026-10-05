@@ -217,13 +217,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--hsdp-shard-size",
         type=int,
-        default=1,
+        default=None,
         help="Number of GPUs to shard weights across for HSDP.",
     )
     parser.add_argument(
         "--hsdp-replicate-size",
         type=int,
-        default=1,
+        default=None,
         help="Number of HSDP replica groups.",
     )
     parser.add_argument(
@@ -586,6 +586,12 @@ def main():
     }
     if args.tensor_parallel_size is not None:
         omni_kwargs["tensor_parallel_size"] = args.tensor_parallel_size
+    if args.use_hsdp:
+        omni_kwargs["use_hsdp"] = True
+    if args.hsdp_shard_size is not None:
+        omni_kwargs["hsdp_shard_size"] = args.hsdp_shard_size
+    if args.hsdp_replicate_size is not None:
+        omni_kwargs["hsdp_replicate_size"] = args.hsdp_replicate_size
     if args.enforce_eager is not None:
         omni_kwargs["enforce_eager"] = args.enforce_eager
     if args.trust_remote_code:
