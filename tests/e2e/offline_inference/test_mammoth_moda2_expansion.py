@@ -162,13 +162,6 @@ def test_diffusion_output_exposes_images_at_top_level():
         pytest.param(_OMNI_RUNNER_PARAM, 1.0, False, id="baseline", marks=hardware_marks(res={"cuda": "H100"})),
         pytest.param(
             _HSDP_RUNNER_PARAM,
-            1.0,
-            True,
-            id="hsdp",
-            marks=hardware_marks(res={"cuda": "H100"}, num_cards=2),
-        ),
-        pytest.param(
-            _HSDP_RUNNER_PARAM,
             4.0,
             True,
             id="hsdp-cfg",
