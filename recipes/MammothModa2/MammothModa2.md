@@ -414,8 +414,9 @@ image.
 
 ## Preview DiT weight sharding with HSDP
 
-HSDP shards the DiT weights using FSDP2. Main `layers.N` blocks are the
-sharding boundaries.
+HSDP shards the DiT weights using FSDP2. Each main `layers.N` block and each
+`noise_refiner.N`, `context_refiner.N`, and `ref_image_refiner.N` block is a
+separate sharding boundary.
 
 Copy `vllm_omni/deploy/mammoth_moda2.yaml` and set the DiT stage (`stage_id: 1`)
 to the following configuration, retaining its other settings:
@@ -440,3 +441,28 @@ CUDA_VISIBLE_DEVICES=0,1 python examples/offline_inference/text_to_image/text_to
   --guidance-scale 4.0 --num-inference-steps 50 \
   --output coffee_hsdp.png
 ```
+
+For four GPUs, set `devices: "0,1,2,3"`, `hsdp_shard_size: 4`, and
+`CUDA_VISIBLE_DEVICES=0,1,2,3`, keeping `hsdp_replicate_size: 1`.
+
+### HSDP memory and latency validation
+
+The Preview checkpoint was tested on NVIDIA RTX PRO 6000 Blackwell Server
+96 GB GPUs connected through PCIe, without NVLink, using vLLM 0.31.0 and
+PyTorch 2.13.0+cu130. Each configuration used a fresh process, one warmup and
+three measured requests with the coffee prompt above, 1024x1024 output,
+50 steps, seed 42, guidance scale 4.0, BF16, TP=1, and eager execution.
+Caching and CPU offload were disabled; AR ran on the first GPU with a fixed
+4 GiB KV cache (`max_model_len=8192`, AR `max_num_seqs=100`, DiT `max_num_seqs=8`).
+
+| Configuration | Generation median (ms) | PyTorch peak reserved (MiB) | NVML diffusion-process peak (MiB) |
+| --- | ---: | ---: | ---: |
+| Baseline, 1 GPU | 72,193 | 10,448 | 11,158 |
+| HSDP, 2 GPUs, shard=2 | 77,201 | 9,214 | 10,246 |
+| HSDP, 4 GPUs, shard=4 | 109,942 | 8,070 | 9,104 |
+
+NVML peak memory per diffusion process decreased by **8.2%** with two GPUs
+and **18.4%** with four GPUs. These peaks include VAE memory and exclude the
+separate AR process; HSDP values are the highest peak across ranks. PyTorch
+reserved peaks are reported for rank 0. All generated images in these runs
+were pixel-identical to the baseline.

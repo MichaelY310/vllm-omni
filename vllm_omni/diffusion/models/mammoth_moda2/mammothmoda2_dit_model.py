@@ -542,9 +542,13 @@ class Transformer2DModel(ModelMixin, ConfigMixin):
 
     @staticmethod
     def _is_transformer_block(name: str, module: nn.Module) -> bool:
-        """Match transformer blocks for HSDP sharding (e.g., layers.0, layers.1)."""
+        """Shard main and refiner blocks separately to limit all-gather buffers."""
         parts = name.split(".")
-        return len(parts) == 2 and parts[0] == "layers" and parts[1].isdigit()
+        return (
+            len(parts) == 2
+            and parts[0] in {"layers", "noise_refiner", "context_refiner", "ref_image_refiner"}
+            and parts[1].isdigit()
+        )
 
     _hsdp_shard_conditions = [_is_transformer_block]
 

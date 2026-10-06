@@ -34,19 +34,23 @@ def tiny_dit() -> Transformer2DModel:
         ).eval()
 
 
-def test_hsdp_selects_only_main_layers(tiny_dit: Transformer2DModel):
+def test_hsdp_selects_main_and_refiner_blocks(tiny_dit: Transformer2DModel):
     # Check the actual module tree, including refiners and nested attention/MLP modules.
     selected = [
         name
         for name, module in tiny_dit.named_modules()
         if any(condition(name, module) for condition in tiny_dit._hsdp_shard_conditions)
     ]
-    assert selected == ["layers.0", "layers.1"]
-    assert len(tiny_dit.noise_refiner) == 1
-    assert len(tiny_dit.context_refiner) == 1
+    assert selected == [
+        "noise_refiner.0",
+        "ref_image_refiner.0",
+        "context_refiner.0",
+        "layers.0",
+        "layers.1",
+    ]
 
 
-def test_hsdp_wraps_main_layers_and_remaining_root_parameters(tiny_dit: Transformer2DModel):
+def test_hsdp_wraps_blocks_and_remaining_root_parameters(tiny_dit: Transformer2DModel):
     # World size one exercises real FSDP2 ownership without requiring CUDA.
     # It does not establish multi-GPU forward correctness or memory savings.
     if dist.is_initialized():
@@ -56,9 +60,8 @@ def test_hsdp_wraps_main_layers_and_remaining_root_parameters(tiny_dit: Transfor
         mesh = init_device_mesh("cpu", (1, 1), mesh_dim_names=("replicate", "shard"))
         shard_model(tiny_dit, mesh=mesh, hsdp_shard_conditions=tiny_dit._hsdp_shard_conditions)
         assert isinstance(tiny_dit, FSDPModule)
-        assert all(isinstance(layer, FSDPModule) for layer in tiny_dit.layers)
-        assert not isinstance(tiny_dit.noise_refiner[0], FSDPModule)
-        assert not isinstance(tiny_dit.context_refiner[0], FSDPModule)
+        for blocks in (tiny_dit.layers, tiny_dit.noise_refiner, tiny_dit.ref_image_refiner, tiny_dit.context_refiner):
+            assert all(isinstance(block, FSDPModule) for block in blocks)
         assert all(isinstance(parameter, DTensor) for parameter in tiny_dit.parameters())
     finally:
         dist.destroy_process_group()
